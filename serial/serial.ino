@@ -1,110 +1,44 @@
-/*
-
-
-uint32_t pixel = 1;            // pixel number that you're changing
-uint32_t red = 0;              // red value 
-uint32_t green = 0;           // green value
-uint32_t blue = 0;            // blue value
-uint32_t bri = 40;
-uint8_t isReady = 0;
-
-void setup() {
-  Serial.setTimeout(5000);
-  Serial.begin(38400); 
-  strip.setBrightness(40);  
-  strip.begin();    
-  setAllPixelsColor();
-  
-  
-}
-
-void loop() {
-  
-  if(!isReady){
-    Serial.println("ready");
-  }
-  
-  if (Serial.available() > 0) {
-    // Example color command : "C2,255,0,0" : turns 3rd pixel red.
-    int cmd = Serial.read();
-    
-    isReady = 1;
-    if(cmd == 'M'){
-      
-//      strip.setBrightness(bri);  
-      char buffer[3 * PIXELS];
-      
-      int bytesRead = Serial.readBytes(buffer, 3 * PIXELS);
-      for(int i=0;i<bytesRead;i++){
-        int j = i*3;
-        uint32_t clr = 0;
-        clr |= (uint32_t)buffer[j++] << 16 |
-              (uint32_t)buffer[j++]  << 8 |
-              (uint32_t)buffer[j];
-        strip.setPixelColor(i, clr);
-      }
-    }else if (cmd == 'C') {    // string should start with C
-      pixel = Serial.parseInt();   
-      red = Serial.parseInt();   
-      green = Serial.parseInt(); 
-      blue = Serial.parseInt();  
-      strip.setPixelColor(pixel, red, green, blue);
-    } else if (cmd == 'A') {
-      red = Serial.parseInt();     
-      green = Serial.parseInt();  
-      blue = Serial.parseInt();   
-      setAllPixelsColor();
-    } else if (cmd == 'B') {
-      bri = Serial.parseInt();
-      strip.setBrightness(bri);
-    }
-    //strip.setPixelColor(0,255,0,0);
-    
-    //strip.setPixelColor(4,0,255,0);
-    strip.show();
-  }
-}
-
-void setAllPixelsColor(){
-  for(int i=0;i<PIXELS;i++){
-    strip.setPixelColor(i, red, green, blue);
-  }
-}
-
-
-
-
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #include <Adafruit_NeoPixel.h>
 
+//Start config
+
+//The arduino digital pin the neopixel data in is connected to
 #define PIN 6
+
+//Number of neopixels connected to arduino
 #define PIXELS 16
+
+
+//End config
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(PIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
-
-
-// Example state machine reading serial input
-// Author: Nick Gammon
-// Date: 17 December 2011
-
-// the possible states of the state-machine
-typedef enum {  NONE, GOT_C, GOT_C_P, GOT_C_P_R, GOT_C_P_R_G, GOT_M, GOT_M_R, GOT_M_R_G, GOT_M_R_G_B, GOT_B, GOT_A, GOT_A_R, GOT_A_R_G, GOT_A_R_G_B, GOT_P, GOT_D } states;
+// the possible states of the state-machine.  reads ascii characters.
+typedef enum {
+                NONE, //0 Nothing received.  Awaiting input
+                
+                GOT_C, //1 Recevied "C".  We now expect to recieve one or more (P)ixel,(R)ed,(G)reen,(B)lue messages. to complete this command. Will display when "D" is received. example : C5,255,255,200,9,255,255,100,D displays 2 diff colors on pixels 5 and 9.
+                  GOT_C_P, //2  Recieved pixel number argument.  Expecting (R)ed next.
+                  GOT_C_P_R, //3 Recieved pixel and red.  Expecting (G)reen next.
+                  GOT_C_P_R_G, //4 Recieved pixel, red, and green.  Expecting (B)lue next.  After blue is received, we'll go straight back to NONE state, so there is no GOT_C_P_R_G_B state. example : example : M255,255,200,255,255,100,D displays 2 diff colors on pixels 0 and 1.
+                  
+                GOT_M, //5 Received "M" expecting to receive RGB colors for each pixel, starting with the first one.  Will display when "D" is received.
+                  GOT_M_R, //6
+                  GOT_M_R_G, //7
+                  GOT_M_R_G_B, //8
+                  
+                GOT_B, //9 Received "B" for Brightness.  sets the brightness (0-100) to the number following for every pixel example : B50D sets brightness to 50% for all pixels
+                
+                GOT_A, //10 Received "A" for All.  Sets all pixels to the following color.  Example : A255,100,50D
+                  GOT_A_R, //11
+                  GOT_A_R_G, //12
+                  GOT_A_R_G_B, //13
+                  
+                GOT_P, //14 Received "P" for Ping.  replies with "READY".
+                
+                GOT_D  //15 Received "D".  Will display whatever commands have been sent since the last display.
+                
+             } states;
 
 // current state-machine state
 states state = NONE;
@@ -115,11 +49,14 @@ uint16_t currentPixel;
 void setup ()
 { 
   strip.begin();    
-  strip.setBrightness(100); 
+  strip.setBrightness(50); 
+  for(int i=0;i<PIXELS;i++){
+    strip.setPixelColor(i, 100,100,100);
+  }
   //strip.setPixelColor(25, 255, 0, 0);
   //setAllPixelsColor();
   
-  Serial.begin (115200);
+  Serial.begin (19200);
   state = NONE;
   
   strip.show();
@@ -133,6 +70,11 @@ void processPing ()
 void processMultipleColors ()
 {
   strip.setPixelColor(currentPixel, currentValue);
+}
+
+void debugOutput ()
+{
+  Serial.println(state);
 }
 
 void processDisplay()
@@ -290,6 +232,8 @@ void processIncomingByte (const byte c)
       state = GOT_C;
       break;
   }
+  
+  debugOutput ();
 } // end of processIncomingByte
 
 void loop ()
